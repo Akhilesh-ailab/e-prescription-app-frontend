@@ -1,0 +1,59 @@
+import { useCallback, useRef } from 'react';
+import type { UseFormSetValue, UseFormGetValues, FieldPath } from 'react-hook-form';
+import type { PrescriptionData } from '../types';
+import { matchAllFieldsInText, matchSaveCommand, type FieldMatch } from '../utils/voiceFieldPatterns';
+
+const MAX_BUFFER_WORDS = 20;
+
+export function useVoiceFieldParser(
+  setValue: UseFormSetValue<PrescriptionData>,
+  getValues: UseFormGetValues<PrescriptionData>,
+  onSaveCommand?: () => void
+) {
+  const bufferRef = useRef('');
+
+  const applyMatch = useCallback((match: FieldMatch) => {
+    const path = match.field as FieldPath<PrescriptionData>;
+    if (match.mode === 'append') {
+      const existing = (getValues(path) as string) || '';
+      if (!existing.toLowerCase().includes(match.value.toLowerCase())) {
+        setValue(path, (existing ? `${existing} ${match.value}` : match.value) as never, { shouldDirty: true });
+      }
+    } else {
+      setValue(path, match.value as never, { shouldDirty: true });
+    }
+  }, [setValue, getValues]);
+
+  const handleSegment = useCallback((segment: string) => {
+    if (matchSaveCommand(segment)) {
+      bufferRef.current = '';
+      onSaveCommand?.();
+      return;
+    }
+
+    // Try the new segment alone first — applies every field found in it,
+    // instead of stopping at the first match like before.
+    const directMatches = matchAllFieldsInText(segment);
+    if (directMatches.length > 0) {
+      directMatches.forEach(applyMatch);
+      bufferRef.current = '';
+      return;
+    }
+
+    // Fall back to the buffered text, for phrases split across STT chunks
+    bufferRef.current = `${bufferRef.current} ${segment}`.trim();
+    const bufferedMatches = matchAllFieldsInText(bufferRef.current);
+    if (bufferedMatches.length > 0) {
+      bufferedMatches.forEach(applyMatch);
+      bufferRef.current = '';
+      return;
+    }
+
+    const words = bufferRef.current.split(/\s+/);
+    if (words.length > MAX_BUFFER_WORDS) {
+      bufferRef.current = words.slice(-MAX_BUFFER_WORDS).join(' ');
+    }
+  }, [applyMatch, onSaveCommand]);
+
+  return { handleSegment };
+}
