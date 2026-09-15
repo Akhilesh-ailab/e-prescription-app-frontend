@@ -1,14 +1,15 @@
 import { useCallback, useRef } from 'react';
-import type { UseFormSetValue, UseFormGetValues, FieldPath } from 'react-hook-form';
+import type { UseFormSetValue, UseFormGetValues, UseFormReset, FieldPath } from 'react-hook-form';
 import type { PrescriptionData } from '../types';
-import { matchAllFieldsInText, matchSaveCommand, type FieldMatch } from '../utils/voiceFieldPatterns';
+import { matchAllFieldsInText, matchSaveCommand, matchClearCommand, type FieldMatch } from '../utils/voiceFieldPatterns';
 
 const MAX_BUFFER_WORDS = 20;
 
 export function useVoiceFieldParser(
   setValue: UseFormSetValue<PrescriptionData>,
   getValues: UseFormGetValues<PrescriptionData>,
-  onSaveCommand?: () => void
+  onSaveCommand?: () => void,
+  resetForm?: UseFormReset<PrescriptionData>
 ) {
   const bufferRef = useRef('');
 
@@ -25,14 +26,23 @@ export function useVoiceFieldParser(
   }, [setValue, getValues]);
 
   const handleSegment = useCallback((segment: string) => {
+    const clearMatch = matchClearCommand(segment);
+    if (clearMatch) {
+      bufferRef.current = '';
+      if (clearMatch.field === 'all') {
+        resetForm?.();
+      } else {
+        setValue(clearMatch.field as FieldPath<PrescriptionData>, '' as never, { shouldDirty: true });
+      }
+      return;
+    }
+
     if (matchSaveCommand(segment)) {
       bufferRef.current = '';
       onSaveCommand?.();
       return;
     }
 
-    // Try the new segment alone first — applies every field found in it,
-    // instead of stopping at the first match like before.
     const directMatches = matchAllFieldsInText(segment);
     if (directMatches.length > 0) {
       directMatches.forEach(applyMatch);
@@ -40,7 +50,6 @@ export function useVoiceFieldParser(
       return;
     }
 
-    // Fall back to the buffered text, for phrases split across STT chunks
     bufferRef.current = `${bufferRef.current} ${segment}`.trim();
     const bufferedMatches = matchAllFieldsInText(bufferRef.current);
     if (bufferedMatches.length > 0) {
@@ -53,7 +62,7 @@ export function useVoiceFieldParser(
     if (words.length > MAX_BUFFER_WORDS) {
       bufferRef.current = words.slice(-MAX_BUFFER_WORDS).join(' ');
     }
-  }, [applyMatch, onSaveCommand]);
+  }, [applyMatch, onSaveCommand, resetForm, setValue]);
 
   return { handleSegment };
 }

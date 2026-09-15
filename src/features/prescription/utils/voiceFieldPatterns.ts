@@ -9,6 +9,10 @@ export interface FieldMatch {
   mode: 'set' | 'append';
 }
 
+export interface ClearMatch {
+  field: FieldTarget | 'all';
+}
+
 interface FieldPattern {
   field: FieldTarget;
   regex: RegExp;
@@ -18,8 +22,6 @@ interface FieldPattern {
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 
-// Stops a field's captured value at the next recognizable trigger phrase (or end of
-// string), so one field's dictation doesn't swallow the next field's content.
 const BOUNDARY =
   "(?=\\s*\\b(?:patient(?:'s)?\\s*name|age(?:\\s*is)?\\s*\\d|gender|sex|phone|contact|mobile|" +
   "complaints?|symptoms?|(?:on|one) examination|diagnos|investigations?|treatment|medications?|" +
@@ -33,13 +35,10 @@ export const FIELD_PATTERNS: FieldPattern[] = [
   { field: 'patientName', regex: new RegExp(`\\bpatient(?:'s)?\\s*name\\b\\s*(?:is)?\\s*(.+?)${BOUNDARY}`, 'i'), mode: 'set' },
 
   { field: 'diagnosis', regex: new RegExp(`\\bdiagnos(?:is|ed with)\\b\\s*(?:is)?\\s*(.+?)${BOUNDARY}`, 'i'), mode: 'set' },
-  // accepts "on examination" or the common mis-hearing "one examination"
   { field: 'onExamination', regex: new RegExp(`\\b(?:on|one) examination\\b\\s*(?:is|shows|reveals)?\\s*(.+?)${BOUNDARY}`, 'i'), mode: 'append' },
   { field: 'investigation', regex: new RegExp(`\\binvestigations?\\b\\s*(?:is|are|shows?)?\\s*(.+?)${BOUNDARY}`, 'i'), mode: 'append' },
   { field: 'treatment', regex: new RegExp(`\\btreatment\\b\\s*(?:is|plan is)?\\s*(.+?)${BOUNDARY}`, 'i'), mode: 'append' },
   { field: 'medications.0.name', regex: new RegExp(`\\b(?:medications?|prescri(?:be|bing|ption))\\b\\s*(?:is|are)?\\s*(.+?)${BOUNDARY}`, 'i'), mode: 'append' },
-  // "complaints" alone is the primary trigger now — short, robust word.
-  // "chief complaints" / "complain of" / "presenting with" still work as fallbacks.
   { field: 'chiefComplaints', regex: new RegExp(`\\b(?:chief\\s*)?complaints?\\b\\s*(?:is|are)?\\s*(.+?)${BOUNDARY}|\\bcomplain(?:s|ing)?\\s*of\\s*(.+?)${BOUNDARY}|\\bpresenting with\\s*(.+?)${BOUNDARY}`, 'i'), mode: 'append' },
 ];
 
@@ -47,6 +46,31 @@ const SAVE_COMMAND = /\b(?:save\s*(?:and|&)?\s*print|save the prescription|submi
 
 export function matchSaveCommand(segment: string): boolean {
   return SAVE_COMMAND.test(segment);
+}
+
+const CLEAR_TARGETS: { keyword: RegExp; field: FieldTarget | 'all' }[] = [
+  { keyword: /\b(?:complaints?)\b/i, field: 'chiefComplaints' },
+  { keyword: /\bon examination\b/i, field: 'onExamination' },
+  { keyword: /\bdiagnosis\b/i, field: 'diagnosis' },
+  { keyword: /\binvestigations?\b/i, field: 'investigation' },
+  { keyword: /\btreatment\b/i, field: 'treatment' },
+  { keyword: /\bmedications?\b/i, field: 'medications.0.name' },
+  { keyword: /\bname\b/i, field: 'patientName' },
+  { keyword: /\bage\b/i, field: 'age' },
+  { keyword: /\bphone|contact\b/i, field: 'contact' },
+  { keyword: /\ball fields?|everything|the form\b/i, field: 'all' },
+];
+
+export function matchClearCommand(segment: string): ClearMatch | null {
+  const clearTrigger = /\bclear\b/i;
+  if (!clearTrigger.test(segment)) return null;
+
+  for (const target of CLEAR_TARGETS) {
+    if (target.keyword.test(segment)) {
+      return { field: target.field };
+    }
+  }
+  return null;
 }
 
 export function matchAllFieldsInText(text: string): FieldMatch[] {

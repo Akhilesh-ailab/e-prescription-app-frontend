@@ -52,15 +52,6 @@ export default function ClinicalNotes() {
           className={`${baseTextarea} ${validTextarea}`}
         />
       </div>
-
-      <div className="flex flex-col">
-        <label className={label}>Treatment</label>
-        <textarea
-          {...register('treatment')}
-          rows={2}
-          className={`${baseTextarea} ${validTextarea}`}
-        />
-      </div>
     </div>
   );
 }

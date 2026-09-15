@@ -1,30 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Login from './features/auth/Login';
 import Signup from './features/auth/Signup';
 import ForgotPassword from './features/auth/ForgotPassword';
 import PrescriptionForm from './features/prescription/components/PrescriptionForm';
 import type { DoctorProfile } from './features/prescription/types';
-import { getSession, saveSession, clearSession, registerDoctor } from './features/prescription/utils/storage';
+import { registerDoctor } from './features/prescription/utils/storage';
 
 type View = 'login' | 'signup' | 'forgot-password';
 
 export default function App() {
+  // No session restore — every page load starts fresh at Login/Signup,
+  // even if a session was previously saved.
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
   const [view, setView] = useState<View>('login');
-  const [checked, setChecked] = useState(false);
-
-  useEffect(() => {
-    setDoctor(getSession());
-    setChecked(true);
-  }, []);
 
   const handleLogin = (profile: DoctorProfile) => {
-    saveSession(profile);
     setDoctor(profile);
   };
 
   const handleLogout = () => {
-    clearSession();
     setDoctor(null);
     setView('login');
   };
@@ -37,8 +31,6 @@ export default function App() {
     }
     handleLogin({ name: `Dr. ${data.fullName}`, designation: data.specialization });
   };
-
-  if (!checked) return null;
 
   if (doctor) {
     return <PrescriptionForm doctor={doctor} onLogout={handleLogout} />;

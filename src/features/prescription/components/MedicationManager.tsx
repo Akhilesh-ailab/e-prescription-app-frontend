@@ -9,11 +9,11 @@ export default function MedicationManager() {
 
   return (
     <div className="flex flex-col">
-      <label className={label}>Medications</label>
+      <label className={label}>Treatment & Medication</label>
       <textarea
-        {...register('medications.0.name')}
-        rows={4}
-        placeholder="e.g. Tab. Paracetamol 500mg — 1-0-1 after food for 5 days"
+        {...register('treatment')}
+        rows={5}
+        placeholder="e.g. Rest, plenty of fluids, review after 5 days. Tab. Paracetamol 500mg — 1-0-1 after food for 5 days"
         className={textarea}
       />
     </div>

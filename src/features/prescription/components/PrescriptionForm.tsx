@@ -25,17 +25,35 @@ export default function PrescriptionForm({ doctor, onLogout }: { doctor: DoctorP
     }
   });
 
-  const onSubmit = useCallback((data: PrescriptionData) => {
-    savePrescription(data, doctor.name);
-    setSaveMessage('Prescription saved successfully.');
-    setTimeout(() => setSaveMessage(null), 3000);
-    setTimeout(() => window.print(), 200);
-  }, [doctor.name]);
+  // Save Details — validates required fields, persists to storage, shows toast. No print.
+  const handleSaveDetails = useCallback(() => {
+    methods.handleSubmit((data) => {
+      savePrescription(data, doctor.name);
+      setSaveMessage('Prescription saved successfully.');
+      setTimeout(() => setSaveMessage(null), 3000);
+    })();
+  }, [methods, doctor.name]);
+
+  // Print — just opens the browser print dialog, no save, no validation gate
+  const handlePrint = useCallback(() => {
+    window.print();
+  }, []);
+
+  // Voice command "save and print" still does both, back to back
+  const handleVoiceSaveAndPrint = useCallback(() => {
+    methods.handleSubmit((data) => {
+      savePrescription(data, doctor.name);
+      setSaveMessage('Prescription saved successfully.');
+      setTimeout(() => setSaveMessage(null), 3000);
+      setTimeout(() => window.print(), 200);
+    })();
+  }, [methods, doctor.name]);
 
   const { handleSegment } = useVoiceFieldParser(
     methods.setValue,
     methods.getValues,
-    () => methods.handleSubmit(onSubmit)()
+    handleVoiceSaveAndPrint,
+    methods.reset
   );
   const { start: startSTT, stop: stopSTT, interimText, fullTranscript, error: sttError, dismissError: dismissSttError } = useSpeechToText(handleSegment);
 
@@ -127,7 +145,7 @@ export default function PrescriptionForm({ doctor, onLogout }: { doctor: DoctorP
 
             <div className="relative z-10 p-4 md:p-7 flex-1 flex flex-col gap-5">
               <FormProvider {...methods}>
-                <form onSubmit={methods.handleSubmit(onSubmit)} className="flex-1 flex flex-col gap-5">
+                <form onSubmit={(e) => e.preventDefault()} className="flex-1 flex flex-col gap-5">
 
                   <Section title="Patient Information" icon={<UserIcon />}>
                     <PatientDetails />
@@ -142,23 +160,31 @@ export default function PrescriptionForm({ doctor, onLogout }: { doctor: DoctorP
                     <ClinicalNotes />
                   </Section>
 
-                  <Section title="Medication" icon={<PillIcon />}>
+                  <Section title="Treatment & Medication" icon={<PillIcon />}>
                     <MedicationManager />
                   </Section>
 
-                  <div className="mt-2 pt-4 border-t border-slate-100 flex justify-center gap-3 print:hidden">
+                  <div className="mt-2 pt-4 border-t border-slate-100 flex justify-center gap-2 md:gap-3 print:hidden">
                     <button
                       type="button"
                       onClick={() => methods.reset()}
-                      className="border border-slate-300 text-slate-600 text-xs font-semibold py-2.5 px-6 rounded-lg hover:bg-slate-50 hover:border-slate-400 transition w-1/3 md:w-auto"
+                      className="border border-slate-300 text-slate-600 text-xs font-semibold py-2.5 px-4 md:px-6 rounded-lg hover:bg-slate-50 hover:border-slate-400 transition flex-1 md:flex-none"
                     >
                       Clear
                     </button>
                     <button
-                      type="submit"
-                      className="bg-brand-600 text-white text-xs font-semibold py-2.5 px-8 rounded-lg hover:bg-brand-700 active:scale-[0.98] transition shadow-md shadow-brand-600/20 w-2/3 md:w-auto"
+                      type="button"
+                      onClick={handlePrint}
+                      className="border border-brand-600 text-brand-600 text-xs font-semibold py-2.5 px-4 md:px-6 rounded-lg hover:bg-brand-50 transition flex-1 md:flex-none"
                     >
-                      Save & Print
+                      Print
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveDetails}
+                      className="bg-brand-600 text-white text-xs font-semibold py-2.5 px-4 md:px-8 rounded-lg hover:bg-brand-700 active:scale-[0.98] transition shadow-md shadow-brand-600/20 flex-1 md:flex-none"
+                    >
+                      Save Details
                     </button>
                   </div>
                 </form>
@@ -167,15 +193,11 @@ export default function PrescriptionForm({ doctor, onLogout }: { doctor: DoctorP
           </div>
         </div>
 
-        {isAiSidebarOpen && (
-          <div className="fixed inset-0 bg-black/20 z-40 lg:hidden transition-opacity print:hidden" onClick={toggleSidebar}></div>
-        )}
-
-        {/* AI Sidebar — bottom sheet on mobile, static right panel on desktop */}
+        {/* AI Sidebar — compact bottom sheet on mobile, static right panel on desktop */}
         <div className={`
           fixed lg:static bottom-0 lg:bottom-auto left-0 lg:left-auto right-0 lg:right-0
-          h-[72vh] lg:h-full w-full lg:w-72 bg-slate-900 flex flex-col z-50 shrink-0
-          rounded-t-2xl lg:rounded-none print:hidden
+          max-h-[46vh] lg:max-h-none lg:h-full w-full lg:w-72 bg-slate-900/98 lg:bg-slate-900 backdrop-blur-sm flex flex-col z-50 shrink-0
+          rounded-t-2xl lg:rounded-none print:hidden shadow-[0_-8px_30px_rgba(0,0,0,0.3)] lg:shadow-none
           transform transition-transform duration-300 ease-in-out
           ${isAiSidebarOpen ? 'translate-y-0' : 'translate-y-full'} lg:translate-y-0 lg:translate-x-0
         `}>
@@ -242,7 +264,26 @@ export default function PrescriptionForm({ doctor, onLogout }: { doctor: DoctorP
               )}
             </div>
 
-            <fieldset className="border border-white/10 p-3 rounded-lg bg-slate-800/60">
+            {/* Mobile — collapsible so it doesn't eat space in the shrunk sheet */}
+            <details className="lg:hidden border border-white/10 rounded-lg bg-slate-800/60 open:pb-3">
+              <summary className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-2 cursor-pointer select-none">
+                How to Dictate
+              </summary>
+              <div className="text-[10px] text-slate-300 space-y-1.5 px-3">
+                <p className="font-medium text-slate-200">Just speak naturally, e.g.:</p>
+                <ul className="space-y-1 list-disc pl-3 marker:text-brand-400">
+                  <li>"Patient's name is Ramesh Kumar"</li>
+                  <li>"Complaints — fever and cough"</li>
+                  <li>"On examination — mild pallor"</li>
+                  <li>"Diagnosis is viral fever"</li>
+                  <li>"Treatment — rest and hydration"</li>
+                  <li>"Save and print"</li>
+                </ul>
+              </div>
+            </details>
+
+            {/* Desktop — always expanded */}
+            <fieldset className="hidden lg:block border border-white/10 p-3 rounded-lg bg-slate-800/60">
               <legend className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">How to Dictate</legend>
               <div className="text-[10px] text-slate-300 space-y-1.5">
                 <p className="font-medium text-slate-200">Just speak naturally, e.g.:</p>
@@ -257,7 +298,7 @@ export default function PrescriptionForm({ doctor, onLogout }: { doctor: DoctorP
               </div>
             </fieldset>
 
-            <div className="flex flex-col flex-1 min-h-[100px]">
+            <div className="flex flex-col flex-1 min-h-[60px] lg:min-h-[100px]">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Transcript</label>
               <textarea
                 readOnly
@@ -348,4 +389,3 @@ function PillIcon() {
     </svg>
   );
 }
-
